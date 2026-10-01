@@ -1,3 +1,4 @@
+mod config;
 mod output;
 
 fn main() {
