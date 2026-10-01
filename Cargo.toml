@@ -1,0 +1,15 @@
+[package]
+name = "acurl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+encoding_rs = "0.8.42"
+infer = "0.22.0"
+lol_html = "3.0.1"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["blocking"] }
+serde = { version = "1.0.229", features = ["derive"] }
+sha2 = "0.11.0"
+toml = "1.1.6"
