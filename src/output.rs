@@ -18,13 +18,19 @@ pub const PROMPT: &str = "\
 ";
 
 fn is_invisible(c: char) -> bool {
-    matches!(c,
-        '\u{200B}'..='\u{200F}'      // zero-width space/joiners, LRM, RLM
-        | '\u{202A}'..='\u{202E}'    // bidi embeddings/overrides
-        | '\u{2060}'..='\u{2064}'    // word joiner, invisible operators
-        | '\u{2066}'..='\u{2069}'    // bidi isolates
-        | '\u{FEFF}'                 // BOM / zero-width no-break space
-        | '\u{E0000}'..='\u{E007F}') // tag characters (ASCII smuggling)
+    // C0/C1 controls (ANSI/OSC escapes, CR) except newline and tab
+    (c.is_control() && c != '\n' && c != '\t')
+        || matches!(c,
+            '\u{061C}'                    // Arabic letter mark (bidi)
+            | '\u{180E}'                  // Mongolian vowel separator
+            | '\u{200B}'..='\u{200F}'      // zero-width space/joiners, LRM, RLM
+            | '\u{202A}'..='\u{202E}'      // bidi embeddings/overrides
+            | '\u{2060}'..='\u{2064}'      // word joiner, invisible operators
+            | '\u{2066}'..='\u{2069}'      // bidi isolates
+            | '\u{FE00}'..='\u{FE0F}'      // variation selectors (smuggling)
+            | '\u{FEFF}'                   // BOM / zero-width no-break space
+            | '\u{E0000}'..='\u{E007F}'    // tag characters (ASCII smuggling)
+            | '\u{E0100}'..='\u{E01EF}')   // variation selectors supplement
 }
 
 pub fn strip_invisible(s: &str) -> String {
@@ -67,6 +73,8 @@ mod tests {
     fn strips_invisible_chars() {
         assert_eq!(strip_invisible("a\u{200B}b\u{E0041}c\u{202E}d\u{FEFF}"), "abcd");
         assert_eq!(strip_invisible("日本語 ok"), "日本語 ok");
+        assert_eq!(strip_invisible("a\u{061C}b\u{FE0F}c\u{E0100}d\u{1b}[0me\rf\u{7f}g\u{9b}h"), "abcd[0mefgh");
+        assert_eq!(strip_invisible("line\n\tindent"), "line\n\tindent");
     }
 
     #[test]

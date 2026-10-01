@@ -25,6 +25,11 @@ pub fn check_method(cfg: &Config, method: &str, url: &Url) -> Result<(), Denied>
     }
 }
 
+/// 303 See Other turns any method into GET; other redirects keep it.
+pub fn redirect_method(status: u16, method: &str) -> String {
+    if status == 303 { "GET".into() } else { method.into() }
+}
+
 /// Writes must not be redirected to another host (the allow_write grant is per host).
 pub fn check_redirect(method: &str, from: &Url, to: &Url) -> Result<(), Denied> {
     if is_read_only(method) || from.host_str() == to.host_str() {
@@ -104,6 +109,13 @@ mod tests {
         assert!(check_method(&cfg, "POST", &url("https://A.com/x")).is_ok());
         assert!(check_method(&cfg, "DELETE", &url("https://a.com/")).is_err());
         assert!(check_method(&cfg, "POST", &url("https://b.com/")).is_err());
+    }
+
+    #[test]
+    fn see_other_switches_to_get_before_the_redirect_check() {
+        assert_eq!(redirect_method(303, "POST"), "GET");
+        assert_eq!(redirect_method(307, "POST"), "POST");
+        assert_eq!(redirect_method(302, "GET"), "GET");
     }
 
     #[test]

@@ -138,6 +138,20 @@ fn unsupported_flag_exits_64() {
 }
 
 #[test]
+fn bad_url_or_header_exits_64() {
+    assert_eq!(acurl(&workdir("badurl"), &["not a url"]).status.code(), Some(64));
+    assert_eq!(acurl(&workdir("badhdr"), &["-H", "nocolon", "http://127.0.0.1:9/"]).status.code(), Some(64));
+}
+
+#[test]
+fn head_of_binary_resource_is_ok() {
+    let (url, _h) = serve("200 OK", "application/pdf", b"");
+    let out = acurl(&workdir("headpdf"), &["-i", &url]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(text(&out.stdout).contains("content-type: application/pdf"), "{}", text(&out.stdout));
+}
+
+#[test]
 fn prompt_subcommand() {
     let out = acurl(&workdir("prompt"), &["prompt"]);
     assert_eq!(out.status.code(), Some(0));
