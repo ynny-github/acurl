@@ -26,8 +26,6 @@ const ARCHIVE_MIMES: &[&str] = &[
     "application/vnd.ms-cab-compressed", "application/x-iso9660-image",
 ];
 
-pub const FILTER_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
-
 /// Content-Type essence ("text/html; charset=x" -> "text/html"), lowercased.
 pub fn essence(ct: &str) -> String {
     ct.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
@@ -168,13 +166,10 @@ pub fn run_filters(filters: &[&Filter], mime: &str, input: Vec<u8>) -> Result<Ve
     let mut data = input;
     for f in filters {
         let args: Vec<String> = f.command.iter().map(|a| a.replace("{mime}", mime)).collect();
-        // The agent controls our environment: never let its PATH (or PYTHONPATH, …) pick
-        // or alter the converter. Filters outside FILTER_PATH need an absolute path.
+        // Inherits the environment: Python tools live in uv/pipx/mise/pyenv paths. An agent
+        // that rewrites PATH can swap a filter, so security filters belong as absolute paths.
         let mut child = match Command::new(&args[0])
             .args(&args[1..])
-            .env_clear()
-            .env("PATH", FILTER_PATH)
-            .env("LANG", "C.UTF-8")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -316,9 +311,11 @@ mod tests {
     }
 
     #[test]
-    fn filters_get_a_fixed_path_and_no_inherited_env() {
-        let sh = Filter { matches: vec!["*".into()], command: ["sh", "-c", "echo $PATH ${HOME:-nohome}"].map(String::from).to_vec() };
-        assert_eq!(run_filters(&[&sh], "x", vec![]).ok().unwrap(), b"/usr/local/bin:/usr/bin:/bin nohome\n");
+    fn filters_inherit_the_environment() {
+        // uv/pipx/mise/pyenv installs need the user's PATH (and shims need HOME etc.)
+        let sh = Filter { matches: vec!["*".into()], command: ["sh", "-c", "echo $PATH"].map(String::from).to_vec() };
+        let want = format!("{}\n", std::env::var("PATH").unwrap());
+        assert_eq!(run_filters(&[&sh], "x", vec![]).ok().unwrap(), want.as_bytes());
     }
 
     #[test]

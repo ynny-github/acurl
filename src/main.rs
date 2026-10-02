@@ -239,12 +239,12 @@ fn render(cfg: &Config, ct: &str, raw: Vec<u8>) -> Result<Out, Error> {
                 // Only the default converter for HTML may be missing (spec); a missing
                 // detector or any other filter fails closed.
                 Err(FilterError::NotFound(cmd)) if cmd == "markitdown" && m == "text/html" => {
-                    eprintln!("acurl: warning: markitdown not found in {}; returning sanitized HTML", inbound::FILTER_PATH);
+                    eprintln!("acurl: warning: markitdown not found in PATH; returning sanitized HTML");
                     Ok(Out::Text(text))
                 }
                 Err(FilterError::NotFound(cmd)) => Err(Denied::new(
                     format!("{m} needs filter `{cmd}`, which is not installed"),
-                    format!("install it in {} or use an absolute path in [[filter]]", inbound::FILTER_PATH),
+                    "install it or use an absolute path in [[filter]]".into(),
                 )
                 .into()),
                 Err(FilterError::Failed(d)) => Err(d.into()),
@@ -263,7 +263,7 @@ fn render(cfg: &Config, ct: &str, raw: Vec<u8>) -> Result<Out, Error> {
                 Ok(o) => Ok(Out::Text(String::from_utf8_lossy(&o).into_owned())),
                 Err(FilterError::NotFound(cmd)) => Err(Denied::new(
                     format!("{m} needs converter `{cmd}`, which is not installed"),
-                    format!("install it in {} or use an absolute path in [[filter]]", inbound::FILTER_PATH),
+                    "install it or use an absolute path in [[filter]]".into(),
                 )
                 .into()),
                 Err(FilterError::Failed(d)) => Err(d.into()),

@@ -14,7 +14,9 @@ AI agent 用の HTTP client CLI。宛先のアクセス制御はせず、リク�
 cargo install --path .
 ```
 
-変換には [markitdown](https://github.com/microsoft/markitdown) を使う。フィルターは `PATH=/usr/local/bin:/usr/bin:/bin` で実行されるため、それ以外の場所（`~/.local/bin` など）にある場合は `[[filter]]` に絶対パスで書く。
+変換には [markitdown](https://github.com/microsoft/markitdown) を使う。フィルターは acurl を実行した環境（PATH など）を引き継いで実行される。`acurl doctor` で、現在の設定とフィルターが使える状態かを確認できる。
+
+インジェクション検知などのセキュリティ用フィルターは、agent が PATH を書き換えて差し替えられないよう、`[[filter]]` に絶対パスで書く。
 
 ## 使い方
 
