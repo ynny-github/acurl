@@ -152,6 +152,14 @@ fn head_of_binary_resource_is_ok() {
 }
 
 #[test]
+fn doctor_subcommand() {
+    let out = acurl(&workdir("doctor"), &["doctor"]);
+    let s = text(&out.stdout);
+    assert!(s.starts_with("ok    no .acurl.toml"), "{s}");
+    assert!(s.contains("filter markitdown"), "{s}");
+}
+
+#[test]
 fn prompt_subcommand() {
     let out = acurl(&workdir("prompt"), &["prompt"]);
     assert_eq!(out.status.code(), Some(0));

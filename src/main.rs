@@ -46,7 +46,8 @@ impl<E: std::fmt::Display> From<E> for Error where E: std::error::Error {
 }
 
 /// HTTP client for AI agents: a curl subset with content-based policy.
-/// Subcommands: `acurl prompt` (text for the agent's system prompt), `sudo acurl trust`.
+/// Subcommands: `acurl prompt` (text for the agent's system prompt), `acurl doctor`
+/// (check config, trust and filters), `sudo acurl trust`.
 #[derive(Parser)]
 #[command(name = "acurl", version)]
 struct Args {
@@ -87,6 +88,13 @@ fn run() -> i32 {
         Some("prompt") => {
             print!("{}", output::PROMPT);
             return 0;
+        }
+        Some("doctor") => {
+            let report = config::doctor(&cwd, std::path::Path::new(config::TRUSTED_PATH));
+            for (ok, msg) in &report {
+                println!("{:<5} {msg}", if *ok { "ok" } else { "FAIL" });
+            }
+            return if report.iter().all(|(ok, _)| *ok) { 0 } else { 1 };
         }
         Some("trust") => {
             return match config::trust(&cwd) {

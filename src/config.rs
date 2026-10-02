@@ -101,6 +101,68 @@ pub fn trusted_hashes(path: &Path) -> HashSet<String> {
         .collect()
 }
 
+/// Why `p` would not count as secure, if it would not.
+fn insecure_reason(p: &Path) -> Option<String> {
+    let m = match std::fs::metadata(p) {
+        Ok(m) => m,
+        Err(_) => return Some(format!("{}: missing", p.display())),
+    };
+    if m.uid() != 0 {
+        Some(format!("{}: not owned by root", p.display()))
+    } else if m.mode() & 0o022 != 0 {
+        Some(format!("{}: writable by group/other (mode {:o})", p.display(), m.mode() & 0o777))
+    } else {
+        None
+    }
+}
+
+/// `acurl doctor`: one (ok, message) per check of the setup acurl would use from `cwd`.
+pub fn doctor(cwd: &Path, trusted_path: &Path) -> Vec<(bool, String)> {
+    let mut out = vec![];
+    let mut cfg = Config::default();
+    match find_config(cwd) {
+        None => out.push((true, format!("no {CONFIG_NAME} (strict defaults)"))),
+        Some(path) => match std::fs::read(&path) {
+            Err(e) => out.push((false, format!("{}: {e}", path.display()))),
+            Ok(bytes) => {
+                out.push((true, format!("config: {}", path.display())));
+                let parsed = std::str::from_utf8(&bytes).map_err(|e| e.to_string()).and_then(parse);
+                out.push(match &parsed {
+                    Ok(_) => (true, "config parses".into()),
+                    Err(e) => (false, format!("config does not parse: {e}")),
+                });
+                for p in [trusted_path.parent().unwrap_or(Path::new("/")), trusted_path] {
+                    out.push(match insecure_reason(p) {
+                        None => (true, format!("{}: owned by root, not group/other-writable", p.display())),
+                        Some(why) => (false, why),
+                    });
+                }
+                let hash = sha256_hex(&bytes);
+                let trusted = trusted_hashes(trusted_path).contains(&hash);
+                out.push(if trusted {
+                    (true, format!("config trusted (sha256 {hash})"))
+                } else {
+                    (false, format!("config not trusted: sha256 {hash} is not in {} (run `sudo acurl trust`)", trusted_path.display()))
+                });
+                if let (true, Ok(c)) = (trusted, parsed) {
+                    cfg = c;
+                }
+            }
+        },
+    }
+    for f in &cfg.filters {
+        let Some(cmd) = f.command.first() else {
+            out.push((false, "filter with an empty command".into()));
+            continue;
+        };
+        out.push(match crate::inbound::resolve_command(cmd) {
+            Some(p) => (true, format!("filter {cmd}: {}", p.display())),
+            None => (false, format!("filter {cmd}: not found (install it or use an absolute path in [[filter]])")),
+        });
+    }
+    out
+}
+
 pub fn parse(text: &str) -> Result<Config, String> {
     toml::from_str(text).map_err(|e| e.to_string())
 }
@@ -206,6 +268,44 @@ mod tests {
     #[test]
     fn untrusted_without_secure_file() {
         assert!(trusted_hashes(Path::new("/nonexistent/trusted")).is_empty());
+    }
+
+    fn tempdir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("acurl-unit-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn fails(report: &[(bool, String)], needle: &str) -> bool {
+        report.iter().any(|(ok, m)| !ok && m.contains(needle))
+    }
+
+    #[test]
+    fn doctor_without_config() {
+        let r = doctor(&tempdir("doc-none"), Path::new("/nonexistent/trusted"));
+        assert_eq!(r[0], (true, "no .acurl.toml (strict defaults)".to_string()));
+        assert!(r.iter().any(|(_, m)| m.starts_with("filter markitdown")), "{r:?}");
+    }
+
+    #[test]
+    fn doctor_reports_parse_errors_and_untrusted_config() {
+        let d = tempdir("doc-bad");
+        std::fs::write(d.join(CONFIG_NAME), "allow_everything = true\n").unwrap();
+        let r = doctor(&d, Path::new("/nonexistent/trusted"));
+        assert!(fails(&r, "does not parse"), "{r:?}");
+        assert!(fails(&r, "/nonexistent/trusted: missing"), "{r:?}");
+        assert!(fails(&r, "not trusted"), "{r:?}");
+    }
+
+    #[test]
+    fn doctor_rejects_a_trusted_file_not_owned_by_root() {
+        let d = tempdir("doc-owner");
+        std::fs::write(d.join(CONFIG_NAME), "").unwrap();
+        let trusted = d.join("trusted");
+        std::fs::write(&trusted, sha256_hex(b"")).unwrap();
+        let r = doctor(&d, &trusted);
+        assert!(fails(&r, "not owned by root"), "{r:?}");
+        assert!(fails(&r, "not trusted"), "{r:?}");
     }
 
     #[test]

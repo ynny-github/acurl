@@ -152,6 +152,18 @@ pub fn strip_html(html: &str) -> Option<String> {
     rewrite_str(html, settings).ok()
 }
 
+/// Where a filter command resolves the way `Command::new` will: absolute/relative paths as
+/// given, bare names through PATH. Must be an executable regular file.
+pub fn resolve_command(cmd: &str) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let exec = |p: &std::path::Path| p.metadata().is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+    if cmd.contains('/') {
+        let p = std::path::PathBuf::from(cmd);
+        return exec(&p).then_some(p);
+    }
+    std::env::split_paths(&std::env::var_os("PATH")?).map(|d| d.join(cmd)).find(|p| exec(p))
+}
+
 pub fn filters_for<'a>(cfg: &'a Config, mime: &str) -> Vec<&'a Filter> {
     cfg.filters.iter().filter(|f| f.matches.iter().any(|p| glob_match(p, mime))).collect()
 }
@@ -308,6 +320,14 @@ mod tests {
         assert!(matches!(run_filters(&[&missing], "x", vec![]), Err(FilterError::NotFound(_))));
         let echo = Filter { matches: vec!["*".into()], command: vec!["echo".into(), "{mime}".into()] };
         assert_eq!(run_filters(&[&echo], "image/png", vec![]).ok().unwrap(), b"image/png\n");
+    }
+
+    #[test]
+    fn resolves_commands_like_the_filter_runner() {
+        assert!(resolve_command("sh").is_some());
+        assert_eq!(resolve_command("/bin/sh"), Some(std::path::PathBuf::from("/bin/sh")));
+        assert_eq!(resolve_command("no-such-acurl-cmd"), None);
+        assert_eq!(resolve_command("/etc/passwd"), None); // not executable
     }
 
     #[test]
