@@ -1,0 +1,199 @@
+{
+  // nono profile for running Claude Code in this project:
+  //   nono run --profile .nono/claude.json -- claude
+  //
+  // Merged from agent-sandbox's claude-profile.json (the agent itself) and
+  // command-profile.json (the commands it runs). Without agent-sandbox's execd
+  // the agent's shell commands run in this same sandbox, so both sets of grants
+  // live here.
+  //
+  // The base is the nolabs-ai/claude registry pack: `nono pull nolabs-ai/claude`.
+  "extends": "nolabs-ai/claude",
+  "meta": { "name": "claude (project)" },
+
+  "groups": {
+    "include": [
+      "python_runtime",
+      "node_runtime",
+      "mise_manager"
+    ]
+  },
+
+  "filesystem": {
+    "allow": [
+      "$WORKDIR",
+      // the claude base grants /tmp write-only; scratch files are read back
+      "/tmp",
+      "$XDG_CACHE_HOME/mise",            // mise writes per-tool cache files here
+      "$XDG_CACHE_HOME/uv",
+      "~/.local/share/uv/python",
+      "$XDG_CACHE_HOME/pip",
+      "~/.npm",
+      "~/.local/share/pnpm"
+    ],
+    "read": [
+      "~/.local/share/mise",
+      "~/.config/mise"
+    ],
+    // No ~/.bashrc grant: the agent's shell is bin/claude-bash, which never
+    // reads it (see that file).
+    "allow_file": ["/dev/null"]
+  },
+
+  "environment": {
+    "allow_vars": [
+      "PATH", "HOME", "TERM", "LANG", "LC_ALL", "USER",
+      "CLAUDE_CODE_SHELL",              // set by bin/claude-sandbox
+      "MISE*", "__MISE*",
+      "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY"
+    ]
+  },
+
+  // Session-wide domain allowlist (proxy filtering). It applies to the agent
+  // and every command; a command policy's own network.allow_domain only works
+  // while this proxy runs. nono's built-in "claude-code" network profile covers
+  // LLM APIs, package registries, GitHub, GitLab, sigstore and docs.
+  "network": {
+    "network_profile": "claude-code",
+    "allow_domain": [
+      "claude.com",
+      "mcp-proxy.anthropic.com",        // claude.ai MCP connectors
+      "statsig.anthropic.com",
+      "downloads.claude.ai",
+      "*.githubusercontent.com",        // release assets (mise, uv)
+      "mise.jdx.dev"
+    ]
+  },
+
+  "command_policies": {
+    // claude-sandbox lives in bin/ inside the writable $WORKDIR; without this
+    // nono refuses to start ("binary is replaceable through writable parent
+    // directory"). The executable pin needs a literal absolute path, which a
+    // template cannot know.
+    "allow_writable_executables": true,
+    "commands": {
+      // The launcher must not start a nested session from inside one.
+      "claude-sandbox": { "from": { "session": "deny" } },
+      // Dangerous commands. The base profile's dangerous_commands groups are
+      // startup-only gating; these are enforced for every session invocation.
+      // privilege escalation
+      "sudo":       { "from": { "session": "deny" } },
+      "su":         { "from": { "session": "deny" } },
+      "doas":       { "from": { "session": "deny" } },
+      "pkexec":     { "from": { "session": "deny" } },
+      "run0":       { "from": { "session": "deny" } },
+      // permissions / ownership (gnu*: GNU coreutils beside uutils on Ubuntu)
+      "chmod":      { "from": { "session": "deny" } },
+      "chown":      { "from": { "session": "deny" } },
+      "chgrp":      { "from": { "session": "deny" } },
+      "gnuchmod":   { "from": { "session": "deny" } },
+      "gnuchown":   { "from": { "session": "deny" } },
+      "gnuchgrp":   { "from": { "session": "deny" } },
+      // power / services
+      "shutdown":   { "from": { "session": "deny" } },
+      "reboot":     { "from": { "session": "deny" } },
+      "halt":       { "from": { "session": "deny" } },
+      "poweroff":   { "from": { "session": "deny" } },
+      "systemctl":  { "from": { "session": "deny" } },
+      // disks / filesystems
+      "dd":         { "from": { "session": "deny" } },
+      "gnudd":      { "from": { "session": "deny" } },
+      "gnushred":   { "from": { "session": "deny" } },
+      "shred":      { "from": { "session": "deny" } },
+      "wipefs":     { "from": { "session": "deny" } },
+      "mkfs":       { "from": { "session": "deny" } },
+      "mkfs.ext4":  { "from": { "session": "deny" } },
+      "mkfs.xfs":   { "from": { "session": "deny" } },
+      "mkfs.btrfs": { "from": { "session": "deny" } },
+      "mkfs.vfat":  { "from": { "session": "deny" } },
+      "mkswap":     { "from": { "session": "deny" } },
+      "fdisk":      { "from": { "session": "deny" } },
+      "gdisk":      { "from": { "session": "deny" } },
+      "parted":     { "from": { "session": "deny" } },
+      "mount":      { "from": { "session": "deny" } },
+      "umount":     { "from": { "session": "deny" } },
+      // system packages
+      "apt":        { "from": { "session": "deny" } },
+      "apt-get":    { "from": { "session": "deny" } },
+      "dpkg":       { "from": { "session": "deny" } },
+      "yum":        { "from": { "session": "deny" } },
+      "dnf":        { "from": { "session": "deny" } },
+      "pacman":     { "from": { "session": "deny" } },
+      "snap":       { "from": { "session": "deny" } },
+      // kernel
+      "insmod":     { "from": { "session": "deny" } },
+      "rmmod":      { "from": { "session": "deny" } },
+      "modprobe":   { "from": { "session": "deny" } },
+      // acurl is the agent's HTTP client; it runs with unrestricted network.
+      "acurl": {
+        "can_use": ["markitdown"],
+        "from": {
+          "session": { "sandbox": {
+            "fs_read":     ["$WORKDIR", "/etc/ssl/certs"],
+            "fs_write":    ["$WORKDIR"],
+            "network":     { "allow_all": true },
+            // No *_proxy vars: they point at the session's filtering proxy,
+            // which would block what allow_all permits.
+            "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+          } }
+        }
+      },
+      // markitdown is acurl's HTML-to-Markdown filter; it only runs from acurl,
+      // reads its Python runtime, and needs no network.
+      "markitdown": {
+        "from": {
+          "session": "deny",
+          "acurl": { "sandbox": {
+            // the venv's base interpreter may be mise's, uv's or the system's
+            "fs_read":     ["~/.local/share/mise", "~/.local/share/uv/python",
+                            "/usr/lib", "/usr/local/lib",
+                            "/sys"],              // onnxruntime (magika) device discovery
+            "fs_read_file": ["/proc/cpuinfo",    // onnxruntime probes the CPU
+                             "/etc/mime.types"], // Python mimetypes (-m <mime>)
+            // onnxruntime persists a telemetry ID here and warns on stderr when
+            // it cannot, which acurl treats as a failed filter.
+            "fs_write":    ["$XDG_CACHE_HOME/Microsoft/DeveloperTools/.onnxruntime"],
+            "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+          } }
+        }
+      },
+      "git": {
+        "can_use": ["ssh"],
+        "from": {
+          "session": { "sandbox": {
+            "fs_read_file": ["@git:config-files", "/etc/ssl/certs/ca-certificates.crt"],
+            "fs_read":      ["@git:hooks-path", "$WORKDIR",
+                             "/usr/lib/git-core", "/usr/libexec/git-core",
+                             "/usr/lib/x86_64-linux-gnu"],
+            "fs_write":     ["$WORKDIR", "@git:common-dir", "@git:worktree", "@git:toplevel"],
+            "exec_paths":   ["/usr/lib/git-core", "/usr/libexec/git-core"],
+            "network":      { "allow_domain": ["github.com", "*.githubusercontent.com"] },
+            "environment":  { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM",
+                                             "http_proxy", "HTTP_PROXY", "https_proxy",
+                                             "HTTPS_PROXY", "no_proxy", "NO_PROXY"] }
+          } }
+        }
+      },
+      "ssh": {
+        "from": {
+          "session": "deny",
+          "git": { "sandbox": {
+            "fs_read":       ["~/.ssh"],
+            "fs_read_file":  ["/etc/ssh/ssh_known_hosts"],
+            "fs_write_file": ["~/.ssh/known_hosts"],
+            "network":       { "allow_all": true },
+            "environment":   { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+          } }
+        }
+      },
+      "docker": {
+        "from": { "session": { "sandbox": {
+          "fs_read":    ["$WORKDIR", "~/.docker", "/usr/libexec/docker", "/usr/lib/docker"],
+          "fs_write":   ["$WORKDIR"],
+          "exec_paths": ["/usr/libexec/docker", "/usr/lib/docker"],
+          "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+        } } }
+      }
+    }
+  }
+}

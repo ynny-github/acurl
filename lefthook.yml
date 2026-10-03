@@ -1,0 +1,9 @@
+prepare-commit-msg:
+  commands:
+    co-author:
+      run: bash .lefthook/prepare-commit-msg/co-author.sh {1} {2}
+
+commit-msg:
+  commands:
+    validate-title:
+      run: bash .lefthook/commit-msg/validate-title.sh {1}

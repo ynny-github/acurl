@@ -1,0 +1,6 @@
+#!/bin/sh
+# Shell for Claude Code's Bash tool; claude-sandbox sets CLAUDE_CODE_SHELL to it.
+# Claude spawns its shell with a socket on stdin, which makes non-interactive
+# bash source ~/.bashrc; --norc --noprofile is the only thing that stops it.
+# The name must contain "bash": Claude ignores CLAUDE_CODE_SHELL otherwise.
+exec bash --norc --noprofile "$@"

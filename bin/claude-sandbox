@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Launch Claude Code under nono with this project's profile (.nono/claude.json).
+# Arguments are passed through to claude: claude-sandbox --resume
+set -euo pipefail
+
+# nono sets NONO_CAP_FILE in every sandboxed process.
+if [ -n "${NONO_CAP_FILE:-}" ]; then
+  echo "claude-sandbox: refusing to run inside a nono sandbox" >&2
+  exit 1
+fi
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# herdr identifies the agent from the exec-time environment of a process in the
+# pane's foreground job; under nono it cannot see claude itself.
+if [ -n "${HERDR_PANE_ID:-}" ]; then
+  export HERDR_AGENT=claude
+fi
+
+# Bash tool commands run through bin/claude-bash (bash --norc --noprofile).
+# Settings env cannot hold this: it is not expanded, and a relative path breaks
+# once the agent cd's elsewhere.
+export CLAUDE_CODE_SHELL="$root/bin/claude-bash"
+
+# --allow-cwd skips nono's interactive "Share <cwd>?" prompt; the access level
+# still comes from the profile. --silent drops nono's banner, summary and log
+# lines (e.g. the skipped git exec_path on distros without /usr/libexec/git-core).
+exec nono run --silent --allow-cwd --profile "$root/.nono/claude.json" claude "$@"
