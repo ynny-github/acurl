@@ -10,9 +10,15 @@ AI agent 用の HTTP client CLI。宛先のアクセス制御はせず、リク�
 
 ## インストール
 
+[mise](https://mise.jdx.dev/) で GitHub Releases のビルド済みバイナリを入れる（Linux x86_64/aarch64、macOS aarch64）。
+
 ```sh
-cargo install --path .
+mise use -g github:ynny-github/acurl
+mise use -g pipx:markitdown   # 変換に使う
+acurl doctor                  # 設定とフィルターを確認する
 ```
+
+ソースからビルドする場合は `cargo install --path .`。
 
 変換には [markitdown](https://github.com/microsoft/markitdown) を使う。フィルターは acurl を実行した環境（PATH など）を引き継いで実行される。`acurl doctor` で、現在の設定とフィルターが使える状態かを確認できる。
 
