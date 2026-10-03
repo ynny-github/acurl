@@ -91,3 +91,7 @@ acurl は agent と同じ sandbox の中で動く。次の2点は nono 側で担
 
 - **秘密情報**：credential proxy（`--credential`）と filesystem の制限で、秘密情報を sandbox の外に置く。acurl はトークン形式のパターン検知しか行わない。
 - **acurl を経由しない通信**：`curl` / `wget` / スクリプトからの直接通信は、nono のネットワーク制御で塞ぐ。acurl の制御は、agent が acurl 以外で外部と通信できない場合にだけ強制力を持つ。
+
+## ライセンス
+
+[MIT](LICENSE)
