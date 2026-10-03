@@ -5,10 +5,18 @@ use std::process::{Command, Output};
 
 const BIN: &str = env!("CARGO_BIN_EXE_acurl");
 
+/// Linux sandboxes cannot grant port 0, so tests listen in the range that
+/// .nono/claude.json opens to cargo (commands.cargo network.open_port_range).
+fn listener() -> TcpListener {
+    (47100..=47199)
+        .find_map(|port| TcpListener::bind(("127.0.0.1", port)).ok())
+        .expect("no free localhost port in 47100-47199")
+}
+
 /// One-shot HTTP server: answers the first request with `status`, `content_type`, `body`.
 /// Returns the base URL and a handle yielding the raw request it received.
 fn serve(status: &str, content_type: &str, body: &[u8]) -> (String, std::thread::JoinHandle<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let listener = listener();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let mut resp = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

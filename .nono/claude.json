@@ -154,6 +154,49 @@
             // it cannot, which acurl treats as a failed filter.
             "fs_write":    ["$XDG_CACHE_HOME/Microsoft/DeveloperTools/.onnxruntime"],
             "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+          } },
+          // acurl's integration tests run target/debug/acurl by path under cargo,
+          // so its markitdown calls resolve to cargo as the caller.
+          "cargo": { "sandbox": {
+            // the venv's base interpreter may be mise's, uv's or the system's
+            "fs_read":     ["~/.local/share/mise", "~/.local/share/uv/python",
+                            "/usr/lib", "/usr/local/lib",
+                            "/sys"],              // onnxruntime (magika) device discovery
+            "fs_read_file": ["/proc/cpuinfo",    // onnxruntime probes the CPU
+                             "/etc/mime.types"], // Python mimetypes (-m <mime>)
+            // onnxruntime persists a telemetry ID here and warns on stderr when
+            // it cannot, which acurl treats as a failed filter.
+            "fs_write":    ["$XDG_CACHE_HOME/Microsoft/DeveloperTools/.onnxruntime"],
+            "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM"] }
+          } }
+        }
+      },
+      // cargo runs in its own tool sandbox: the session's proxy seccomp layer
+      // (nono 0.78) denies every localhost connect except the proxy, which
+      // breaks the integration tests' local HTTP server. Tool sandboxes only get
+      // the static seccomp baseline, so open_port_range works here.
+      "cargo": {
+        "can_use": ["markitdown"],
+        "from": {
+          "session": { "sandbox": {
+            "fs_read":    ["$WORKDIR", "~/.cargo", "~/.rustup",
+                           "/usr/bin", "/usr/lib", "/usr/lib/cargo/bin",
+                           "/usr/libexec/gcc", "/usr/include", "/etc/ssl/certs"],
+            "fs_write":   ["$WORKDIR", "~/.cargo/registry", "~/.cargo/git", "/tmp"],
+            // toolchain (rustup proxies, rustc, rust-lld), linker (gcc's
+            // collect2), test helpers (sh/tr/rev; uutils behind /usr/bin), and
+            // test binaries plus target/debug/acurl.
+            "exec_paths": ["~/.cargo/bin", "~/.rustup", "/usr/bin",
+                           "/usr/lib/cargo/bin", "/usr/libexec/gcc", "$WORKDIR"],
+            "network": {
+              "allow_domain": ["crates.io", "index.crates.io", "static.crates.io"],
+              // localhost ports for tests/cli.rs listener()
+              "open_port_range": [[47100, 47199]]
+            },
+            "environment": { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR",
+                                            "RUST*", "CARGO*",
+                                            "http_proxy", "HTTP_PROXY", "https_proxy",
+                                            "HTTPS_PROXY", "no_proxy", "NO_PROXY"] }
           } }
         }
       },
@@ -161,12 +204,19 @@
         "can_use": ["ssh"],
         "from": {
           "session": { "sandbox": {
+            // git's sandbox may only exec what is both readable and in exec_paths.
+            // Hooks need: the hook scripts (@git:common-dir/hooks, worktree-safe),
+            // /bin/sh and bash (/usr/bin), Ubuntu's uutils coreutils behind
+            // /usr/bin symlinks (/usr/lib/cargo/bin), and lefthook (mise).
             "fs_read_file": ["@git:config-files", "/etc/ssl/certs/ca-certificates.crt"],
             "fs_read":      ["@git:hooks-path", "$WORKDIR",
                              "/usr/lib/git-core", "/usr/libexec/git-core",
-                             "/usr/lib/x86_64-linux-gnu"],
+                             "/usr/lib/x86_64-linux-gnu",
+                             "/usr/bin", "/usr/lib/cargo/bin", "~/.local/share/mise"],
             "fs_write":     ["$WORKDIR", "@git:common-dir", "@git:worktree", "@git:toplevel"],
-            "exec_paths":   ["/usr/lib/git-core", "/usr/libexec/git-core"],
+            "exec_paths":   ["/usr/lib/git-core", "/usr/libexec/git-core",
+                             "/usr/bin", "/usr/lib/cargo/bin", "~/.local/share/mise",
+                             "@git:common-dir"],
             "network":      { "allow_domain": ["github.com", "*.githubusercontent.com"] },
             "environment":  { "allow_vars": ["PATH", "HOME", "USER", "LANG", "TERM",
                                              "http_proxy", "HTTP_PROXY", "https_proxy",
